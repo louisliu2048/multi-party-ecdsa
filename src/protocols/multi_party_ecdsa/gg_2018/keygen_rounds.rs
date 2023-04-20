@@ -15,6 +15,7 @@ use curv::{
 
 use paillier::EncryptionKey;
 use serde::{Deserialize, Serialize};
+use zk_paillier::zkproofs::DLogStatement;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LocalPartySaveData {
@@ -24,4 +25,5 @@ pub struct LocalPartySaveData {
     pub vss_scheme_vec:  Vec<VerifiableSS<Secp256k1>>,
     pub paillier_key_vector: Vec<EncryptionKey>,
     pub y_sum: Point<Secp256k1>,
+    pub h1_h2_n_tilde_vec: Vec<DLogStatement>,
 }

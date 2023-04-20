@@ -132,7 +132,7 @@ impl OfflineStage {
         let store5_wants_more = self.msgs5.as_ref().map(|s| s.wants_more()).unwrap_or(false);
         let store6_wants_more = self.msgs6.as_ref().map(|s| s.wants_more()).unwrap_or(false);
 
-        let start = Instant::now();
+        // let start = Instant::now();
         let next_state: OfflineR;
         let try_again: bool = match replace(&mut self.round, OfflineR::Gone) {
             OfflineR::R0(round) if !round.is_expensive() || may_block => {
@@ -141,9 +141,9 @@ impl OfflineStage {
                     .map(OfflineR::R1)
                     .map_err(Error::ProceedRound)?;
 
-                let duration = start.elapsed();
-                let ms = duration.as_millis();
-                println!("round0! duration: {:?}ms",ms);
+                // let duration = start.elapsed();
+                // let ms = duration.as_millis();
+                // println!("round0! duration: {:?}ms",ms);
 
                 true
             }
@@ -161,9 +161,9 @@ impl OfflineStage {
                     .map(OfflineR::R2)
                     .map_err(Error::ProceedRound)?;
 
-                let duration = start.elapsed();
-                let ms = duration.as_millis();
-                println!("round1! duration: {:?}ms",ms);
+                // let duration = start.elapsed();
+                // let ms = duration.as_millis();
+                // println!("round1! duration: {:?}ms",ms);
 
                 true
             }
@@ -181,9 +181,9 @@ impl OfflineStage {
                     .map(OfflineR::R3)
                     .map_err(Error::ProceedRound)?;
 
-                let duration = start.elapsed();
-                let ms = duration.as_millis();
-                println!("round2! duration: {:?}ms",ms);
+                // let duration = start.elapsed();
+                // let ms = duration.as_millis();
+                // println!("round2! duration: {:?}ms",ms);
 
                 true
             }
@@ -201,9 +201,9 @@ impl OfflineStage {
                     .map(OfflineR::R4)
                     .map_err(Error::ProceedRound)?;
 
-                let duration = start.elapsed();
-                let ms = duration.as_millis();
-                println!("round3! duration: {:?}ms",ms);
+                // let duration = start.elapsed();
+                // let ms = duration.as_millis();
+                // println!("round3! duration: {:?}ms",ms);
 
                 true
             }
@@ -221,9 +221,9 @@ impl OfflineStage {
                     .map(OfflineR::R5)
                     .map_err(Error::ProceedRound)?;
 
-                let duration = start.elapsed();
-                let ms = duration.as_millis();
-                println!("round4! duration: {:?}ms",ms);
+                // let duration = start.elapsed();
+                // let ms = duration.as_millis();
+                // println!("round4! duration: {:?}ms",ms);
 
                 false
             }
@@ -241,9 +241,9 @@ impl OfflineStage {
                     .map(OfflineR::R6)
                     .map_err(Error::ProceedRound)?;
 
-                let duration = start.elapsed();
-                let ms = duration.as_millis();
-                println!("round5! duration: {:?}ms",ms);
+                // let duration = start.elapsed();
+                // let ms = duration.as_millis();
+                // println!("round5! duration: {:?}ms",ms);
 
                 false
             }
@@ -261,9 +261,9 @@ impl OfflineStage {
                     .map(OfflineR::Finished)
                     .map_err(Error::ProceedRound)?;
 
-                let duration = start.elapsed();
-                let ms = duration.as_millis();
-                println!("round6! duration: {:?}ms",ms);
+                // let duration = start.elapsed();
+                // let ms = duration.as_millis();
+                // println!("round6! duration: {:?}ms",ms);
 
                 false
             }

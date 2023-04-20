@@ -16,26 +16,27 @@ mod bench {
     use curv::cryptographic_primitives::hashing::{Digest, DigestExt};
     use sha2::Sha256;
     use uuid::Uuid;
+    use zk_paillier::zkproofs::DLogStatement;
 
     use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2018::keygen_rounds::LocalPartySaveData;
     use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2018::msg::Message;
-    use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2018::sign_rounds::{
-        LocalParty, OnlineR,
-    };
+    use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2018::sign_rounds::{ErrorType, LocalParty, OnlineR};
     use multi_party_ecdsa::utilities::mta::{MessageA, MessageB};
 
-    pub fn bench_full_sign_party_one_three_serial_raw(c: &mut Criterion) {
-        c.bench_function("sign t=1 n=3, Serial - raw", move |b| {
-            b.iter(|| {
-                sign_t_n_parties(1, 3, vec![0, 1]);
-            })
-        });
-    }
-
-    pub fn sign_t_n_parties(t: u16, n: u16, s: Vec<u16>) {
+    fn load_data(s: Vec<u16>) -> Result<
+        (
+            Vec<Keys>,
+            Vec<SharedKeys>,
+            Vec<Vec<VerifiableSS<Secp256k1>>>,
+            Vec<Vec<DLogStatement>>,
+            Point<Secp256k1>,
+        ),
+        ErrorType,
+    > {
         let mut party_keys_vec = Vec::new();
         let mut shared_keys_vec = Vec::new();
         let mut vss_scheme_vec = Vec::new();
+        let mut h1_h2_n_tilde_vec = Vec::new();
         let mut y : Point<Secp256k1> = Point::zero();
 
         // full key gen emulation
@@ -51,8 +52,38 @@ mod bench {
             party_keys_vec.push(local_data.party_keys);
             shared_keys_vec.push(local_data.shared_keys);
             vss_scheme_vec.push(local_data.vss_scheme_vec);
+            h1_h2_n_tilde_vec.push(local_data.h1_h2_n_tilde_vec);
             y = local_data.y_sum;
         }
+        Ok((
+            party_keys_vec,
+            shared_keys_vec,
+            vss_scheme_vec,
+            h1_h2_n_tilde_vec,
+            y,
+            ))
+    }
+
+    pub fn bench_full_sign_party_one_three_serial_raw(c: &mut Criterion) {
+        let data = load_data(vec![0,1]);
+        c.bench_function("sign t=1 n=3, Serial - raw", move |b| {
+            b.iter(|| {
+                sign_t_n_parties(1, 3, vec![0, 1], data.clone());
+            })
+        });
+    }
+
+    pub fn sign_t_n_parties(t: u16, n: u16, s: Vec<u16>, data: Result<
+        (
+            Vec<Keys>,
+            Vec<SharedKeys>,
+            Vec<Vec<VerifiableSS<Secp256k1>>>,
+            Vec<Vec<DLogStatement>>,
+            Point<Secp256k1>,
+        ),
+        ErrorType,
+    >) {
+        let (party_keys_vec,shared_keys_vec,vss_scheme_vec, h1_h2_n_tilde_vec, y) = data.unwrap();
 
         let private_vec = (0..shared_keys_vec.len())
             .map(|i| PartyPrivate::set_private(party_keys_vec[i].clone(), shared_keys_vec[i].clone()))
@@ -77,7 +108,7 @@ mod bench {
         let m_a_vec: Vec<_> = sign_keys_vec
             .iter()
             .enumerate()
-            .map(|(i, k)| MessageA::a(&k.k_i, &party_keys_vec[usize::from(s[i])].ek, &[]).0)
+            .map(|(i, k)| MessageA::a(&k.k_i, &party_keys_vec[usize::from(s[i])].ek, &h1_h2_n_tilde_vec[usize::from(s[i])]).0)
             .collect();
 
         // each party i sends responses to m_a_vec she received (one response with input gamma_i and one with w_i)
@@ -102,14 +133,14 @@ mod bench {
                     &key.gamma_i,
                     &party_keys_vec[usize::from(s[ind])].ek,
                     m_a_vec[ind].clone(),
-                    &[],
+                    &h1_h2_n_tilde_vec[ind].clone(),
                 )
                     .unwrap();
                 let (m_b_w, beta_wi, _, _) = MessageB::b(
                     &key.w_i,
                     &party_keys_vec[usize::from(s[ind])].ek,
                     m_a_vec[ind].clone(),
-                    &[],
+                    &h1_h2_n_tilde_vec[ind].clone(),
                 )
                     .unwrap();
 

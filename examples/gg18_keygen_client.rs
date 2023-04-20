@@ -17,6 +17,7 @@ use paillier::EncryptionKey;
 use reqwest::Client;
 use sha2::Sha256;
 use std::{env, fs, time};
+use zk_paillier::zkproofs::DLogStatement;
 
 mod common;
 use common::{
@@ -258,6 +259,10 @@ fn main() {
     let paillier_key_vec = (0..PARTIES)
         .map(|i| bc1_vec[i as usize].e.clone())
         .collect::<Vec<EncryptionKey>>();
+    let h1_h2_n_tilde_vec = bc1_vec
+        .iter()
+        .map(|bc1| bc1.dlog_statement.clone())
+        .collect::<Vec<DLogStatement>>();
 
     let keygen_json = serde_json::to_string(&(
         party_keys, // 我自己的Paillier公私钥相关信息
@@ -266,6 +271,7 @@ fn main() {
         vss_scheme_vec, // 所有人的多项式系数数组[[g^a0, g^a1, g^a2,...],[],[]]
         paillier_key_vec, // 别人的Paillier 公钥
         y_sum,
+        h1_h2_n_tilde_vec,
     ))
     .unwrap();
     fs::write(env::args().nth(2).unwrap(), keygen_json).expect("Unable to save !");

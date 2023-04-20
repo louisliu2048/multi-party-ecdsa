@@ -104,7 +104,7 @@ impl Round0 {
         );
 
         let (com, decommit) = sign_keys.phase1_broadcast(); // com: 关于g^γ的hash承诺, decommit: [tmp || g^γ_x || g^γ_y]
-        let (m_a_k, _) = MessageA::a(&sign_keys.k_i, &self.local_data.data.party_keys.ek, &[]); // 关于ki的Paillier加密Enk(Ki)
+        let (m_a_k, _) = MessageA::a(&sign_keys.k_i, &self.local_data.data.party_keys.ek, &self.local_data.data.h1_h2_n_tilde_vec); // 关于ki的Paillier加密Enk(Ki)
 
         self.local_data
             .out
@@ -112,7 +112,7 @@ impl Round0 {
                 from: self.local_data.party_num_int,
                 to: 0,
                 round: "round1".to_string(),
-                data: serde_json::to_string(&(com.clone(), m_a_k)).unwrap(),
+                data: serde_json::to_string(&(com.clone(), m_a_k.clone())).unwrap(),
                 sender_uuid: self.local_data.uuid.clone(),
                 is_broadcast: true,
             })
@@ -124,6 +124,7 @@ impl Round0 {
             sign_keys,
             com,
             decommit,
+            // m_a_k,
         });
     }
 }
@@ -138,6 +139,7 @@ pub struct Round1 {
 
     // 搬运工
     pub decommit: SignDecommitPhase1, // 给round3和round4用了
+    // pub m_a_k: MessageA,
 }
 
 impl Round1 {
@@ -149,7 +151,7 @@ impl Round1 {
         for i in 1..self.local_data.threshold + 2 {
             if i == self.local_data.party_num_int {
                 bc1_vec.push(self.com.clone()); // 所有g^γ的hash承诺
-                                                                //   m_a_vec.push(m_a_k.clone());
+                // m_a_vec.push(self.m_a_k.clone());
             } else {
                 //     if signers_vec.contains(&(i as usize)) {
                 let (bc1_j, m_a_party_j): (SignBroadcastPhase1, MessageA) =
@@ -176,7 +178,7 @@ impl Round1 {
                     &self.local_data.data.paillier_key_vector
                         [usize::from(self.signers_vec[usize::from(i - 1)])], // 别人的Paillier pubkey
                     m_a_vec[j].clone(), // 别人的Enk(Ki)
-                    &[],
+                    &self.local_data.data.h1_h2_n_tilde_vec,
                 )
                 .unwrap();
 
@@ -186,7 +188,7 @@ impl Round1 {
                     &self.local_data.data.paillier_key_vector
                         [usize::from(self.signers_vec[usize::from(i - 1)])], // 别人的 Paillier pubkey
                     m_a_vec[j].clone(), // 别人的Enk(Ki)
-                    &[],
+                    &self.local_data.data.h1_h2_n_tilde_vec,
                 )
                 .unwrap();
 

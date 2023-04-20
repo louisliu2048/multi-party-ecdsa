@@ -19,10 +19,11 @@ mod bench {
     use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2018::sign_rounds::{
         LocalParty, OnlineR,
     };
+    use std::time::Instant;
 
-    fn load_party_data() -> Vec<LocalPartySaveData> {
+    fn load_party_data(t: u16) -> Vec<LocalPartySaveData> {
         let mut save_data = Vec::new();
-        for i in 1..3 {
+        for i in 1..t+2 {
             // read key file
             let proj_dir = env::current_dir().expect("not found path");
             let file_path = format!("benches/multi_party_ecdsa/gg18/keys{}.store",  i);
@@ -36,9 +37,10 @@ mod bench {
     }
 
     pub fn bench_full_sign_party_one_three_serial(c: &mut Criterion) {
+        let data = load_party_data(1);
         c.bench_function("sign t=1 n=3, Serial", move |b| {
             b.iter(|| {
-                sign_t_n_parties(1, 3);
+                sign_t_n_parties(1, 3, data.clone());
             })
         });
     }
@@ -49,13 +51,13 @@ mod bench {
     //     });
     // }
 
-    // Here we have an async function to benchmark
-    async fn sign_parallel(t: u16, n: u16) {
-        // Do something async with the size
-        sign_t_n_parties(t, n);
-    }
+    // // Here we have an async function to benchmark
+    // async fn sign_parallel(t: u16, n: u16) {
+    //     // Do something async with the size
+    //     sign_t_n_parties(t, n);
+    // }
 
-    pub fn sign_t_n_parties(t: u16, n: u16) {
+    pub fn sign_t_n_parties(t: u16, n: u16, data: Vec<LocalPartySaveData>) {
         if t + 2 > n {
             panic!("invalid param of t: {} - n: {}", t, n);
         }
@@ -67,17 +69,10 @@ mod bench {
 
         let mut party_round_map = HashMap::new();
         for i in 1..t + 2 {
-            // read key file
-            let proj_dir = env::current_dir().expect("not found path");
-            let file_path = format!("benches/multi_party_ecdsa/gg18/keys{}.store",  i);
-            let data = fs::read_to_string(proj_dir.join(file_path).to_str().unwrap())
-                .expect("Unable to load keys, did you run keygen first? ");
-            let local_data: LocalPartySaveData = serde_json::from_str(&data).unwrap();
-
             let uuid = Uuid::new_v4().to_string();
 
             let local_party = LocalParty::new(
-                local_data,
+                data[(i-1) as usize].clone(),
                 t as u16,
                 i,
                 uuid,
@@ -124,36 +119,97 @@ mod bench {
         let mut round_ans_vec = Vec::new();
         round_ans_vec.push(msg);
 
+        // let start = Instant::now();
         match current_round {
             OnlineR::R0(round) => {
-                return round.update(&round_ans_vec).map(OnlineR::R1).unwrap();
+                let s = round.update(&round_ans_vec).map(OnlineR::R1).unwrap();
+
+                // let duration = start.elapsed();
+                // let ms = duration.as_millis();
+                // println!("round0! duration: {:?}ms",ms);
+
+                return s
             }
             OnlineR::R1(round) => {
-                return round.update(&round_ans_vec).map(OnlineR::R2).unwrap();
+                let s =  round.update(&round_ans_vec).map(OnlineR::R2).unwrap();
+
+                // let duration = start.elapsed();
+                // let ms = duration.as_millis();
+                // println!("round1! duration: {:?}ms",ms);
+
+                return s
             }
             OnlineR::R2(round) => {
-                return round.update(&round_ans_vec).map(OnlineR::R3).unwrap();
+                let s =  round.update(&round_ans_vec).map(OnlineR::R3).unwrap();
+
+                // let duration = start.elapsed();
+                // let ms = duration.as_millis();
+                // println!("round2! duration: {:?}ms",ms);
+
+                return s
             }
             OnlineR::R3(round) => {
-                return round.update(&round_ans_vec).map(OnlineR::R4).unwrap();
+                let s =  round.update(&round_ans_vec).map(OnlineR::R4).unwrap();
+
+                // let duration = start.elapsed();
+                // let ms = duration.as_millis();
+                // println!("round3! duration: {:?}ms",ms);
+
+                return s
             }
             OnlineR::R4(round) => {
-                return round.update(&round_ans_vec).map(OnlineR::R5).unwrap();
+                let s = round.update(&round_ans_vec).map(OnlineR::R5).unwrap();
+
+                // let duration = start.elapsed();
+                // let ms = duration.as_millis();
+                // println!("round4! duration: {:?}ms",ms);
+
+                return s
             }
             OnlineR::R5(round) => {
-                return round.update(&round_ans_vec).map(OnlineR::R6).unwrap();
+                let s =  round.update(&round_ans_vec).map(OnlineR::R6).unwrap();
+
+                // let duration = start.elapsed();
+                // let ms = duration.as_millis();
+                // println!("round5! duration: {:?}ms",ms);
+
+                return s
             }
             OnlineR::R6(round) => {
-                return round.update(&round_ans_vec).map(OnlineR::R7).unwrap();
+                let s =  round.update(&round_ans_vec).map(OnlineR::R7).unwrap();
+
+                // let duration = start.elapsed();
+                // let ms = duration.as_millis();
+                // println!("round6! duration: {:?}ms",ms);
+
+                return s
             }
             OnlineR::R7(round) => {
-                return round.update(&round_ans_vec).map(OnlineR::R8).unwrap();
+                let s =  round.update(&round_ans_vec).map(OnlineR::R8).unwrap();
+
+                // let duration = start.elapsed();
+                // let ms = duration.as_millis();
+                // println!("round7! duration: {:?}ms",ms);
+
+                return s
             }
             OnlineR::R8(round) => {
-                return round.update(&round_ans_vec).map(OnlineR::R9).unwrap();
+                let s =  round.update(&round_ans_vec).map(OnlineR::R9).unwrap();
+
+                // let duration = start.elapsed();
+                // let ms = duration.as_millis();
+                // println!("round8! duration: {:?}ms",ms);
+
+                return s
             }
             OnlineR::R9(round) => {
-                return round.update(&round_ans_vec).map(OnlineR::Finished).unwrap();
+                let s =  round.update(&round_ans_vec).map(OnlineR::Finished).unwrap();
+
+                // let duration = start.elapsed();
+                // let ms = duration.as_millis();
+                // println!("round9! duration: {:?}ms",ms);
+
+                return s
             }
             s @ OnlineR::Finished(_) | s @ OnlineR::Gone => {
                 return s;
