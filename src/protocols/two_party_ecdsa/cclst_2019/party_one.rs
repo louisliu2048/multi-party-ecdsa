@@ -63,7 +63,7 @@ pub struct KeyGenSecondMsg {
     pub comm_witness: CommWitness,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HSMCL {
     pub public: PK,
     pub secret: SK,
@@ -71,7 +71,7 @@ pub struct HSMCL {
     pub cl_group: CLGroup,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HSMCLPublic {
     pub cl_pub_key: PK,
     pub proof: CLDLProof,
@@ -79,7 +79,7 @@ pub struct HSMCLPublic {
     pub cl_group: CLGroup,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignatureRecid {
     pub s: BigInt,
     pub r: BigInt,

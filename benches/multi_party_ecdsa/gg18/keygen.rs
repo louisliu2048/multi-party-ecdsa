@@ -5,10 +5,10 @@ mod bench {
     use curv::cryptographic_primitives::secret_sharing::feldman_vss::VerifiableSS;
     use curv::elliptic::curves::{secp256_k1::Secp256k1, Point, Scalar};
     use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2018::party_i::*;
-    pub fn bench_full_keygen_party_one_two(c: &mut Criterion) {
-        c.bench_function("keygen t=1 n=2", move |b| {
+    pub fn bench_full_keygen_party_one_three(c: &mut Criterion) {
+        c.bench_function("keygen t=1 n=3", move |b| {
             b.iter(|| {
-                keygen_t_n_parties(1, 2);
+                keygen_t_n_parties(1, 3);
             })
         });
     }
@@ -128,8 +128,7 @@ mod bench {
     name = keygen;
     config = Criterion::default().sample_size(10);
     targets =
-    self::bench_full_keygen_party_one_two,
-    self::bench_full_keygen_party_two_three}
+    self::bench_full_keygen_party_one_three}
 }
 
 criterion_main!(bench::keygen);

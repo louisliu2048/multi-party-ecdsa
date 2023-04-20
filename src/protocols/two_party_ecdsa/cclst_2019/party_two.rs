@@ -52,7 +52,7 @@ pub struct KeyGenFirstMsg {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct KeyGenSecondMsg {}
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Party2Public {
     pub group: CLGroup,
     pub ek: HSMCLPK,

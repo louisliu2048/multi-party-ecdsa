@@ -50,7 +50,7 @@ use zk_paillier::zkproofs::{CompositeDLogProof, DLogStatement};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EcKeyPair {
     pub public_share: Point<Secp256k1>,
-    secret_share: Scalar<Secp256k1>,
+    pub secret_share: Scalar<Secp256k1>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -72,7 +72,7 @@ pub struct KeyGenSecondMsg {
     pub comm_witness: CommWitness,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PaillierKeyPair {
     pub ek: EncryptionKey,
     dk: DecryptionKey,
@@ -320,6 +320,7 @@ impl PaillierKeyPair {
         let (ek, dk) = Paillier::keypair().keys();
         let randomness = Randomness::sample(&ek);
 
+        // 计算Enk(x_1)
         let encrypted_share = Paillier::encrypt_with_chosen_randomness(
             &ek,
             RawPlaintext::from(keygen.secret_share.to_bigint()),

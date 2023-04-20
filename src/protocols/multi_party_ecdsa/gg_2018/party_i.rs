@@ -230,8 +230,11 @@ impl Keys {
                     .is_ok()
         });
 
+        // vss_scheme: 生成的多项式系数ai在曲线上的值：g^ai
+        // secret_shares: 生成的f(i)以及多项式的系数数组[a0, a1, a2, ...]
         let (vss_scheme, secret_shares) =
             VerifiableSS::share(params.threshold, params.share_count, &self.u_i);
+
         if correct_key_correct_decom_all {
             Ok((vss_scheme, secret_shares.to_vec(), self.party_index))
         } else {
@@ -243,8 +246,8 @@ impl Keys {
         &self,
         params: &Parameters,
         y_vec: &[Point<Secp256k1>],
-        secret_shares_vec: &[Scalar<Secp256k1>],
-        vss_scheme_vec: &[VerifiableSS<Secp256k1>],
+        secret_shares_vec: &[Scalar<Secp256k1>], // 别人以及自己给我生成的f_j(i)
+        vss_scheme_vec: &[VerifiableSS<Secp256k1>], //所有人的多项式系数数组[[g^a0, g^a1, g^a2,...],[],[]]
         index: u16,
     ) -> Result<(SharedKeys, DLogProof<Secp256k1, Sha256>), Error> {
         assert_eq!(y_vec.len(), usize::from(params.share_count));
@@ -497,7 +500,7 @@ impl LocalSignature {
                 .unwrap()
                 .mod_floor(Scalar::<Secp256k1>::group_order()),
         );
-        let s_i = m_fe * k_i + r * sigma_i;
+        let s_i = m_fe * k_i + r * sigma_i; // 算出自己这部分si
         let l_i = Scalar::<Secp256k1>::random();
         let rho_i = Scalar::<Secp256k1>::random();
         Self {
@@ -520,13 +523,14 @@ impl LocalSignature {
     ) {
         let blind_factor = BigInt::sample(SECURITY);
         let g = Point::generator();
-        let A_i = g * &self.rho_i;
-        let l_i_rho_i = &self.l_i * &self.rho_i;
-        let B_i = g * l_i_rho_i;
-        let V_i = &self.R * &self.s_i + g * &self.l_i;
+        let A_i = g * &self.rho_i; // Ai = g^ρi
+        let l_i_rho_i = &self.l_i * &self.rho_i; // li*ρi
+        let B_i = g * l_i_rho_i; // g^(li*ρi)
+        let V_i = &self.R * &self.s_i + g * &self.l_i; // R*si + li
         let input_hash = Sha256::new()
             .chain_points([&V_i, &A_i, &B_i])
             .result_bigint();
+        // Hash(tmp || Vi || Ai || Bi)
         let com = HashCommitment::<Sha256>::create_commitment_with_user_defined_randomness(
             &input_hash,
             &blind_factor,

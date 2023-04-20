@@ -138,5 +138,7 @@ fn test_two_party_sign() {
 
     let pubkey =
         party_one::compute_pubkey(&party1_private, &party_two_private_share_gen.public_share);
-    party_one::verify(&signature, &pubkey, &message).expect("Invalid signature")
+    println!("pubkey is:{:?} ", pubkey);
+    println!("signature is:{:?} ", signature);
+    party_one::verify(&signature, &pubkey, &message).expect("Invalid signature");
 }

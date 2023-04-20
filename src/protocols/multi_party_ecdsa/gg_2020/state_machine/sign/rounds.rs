@@ -82,6 +82,7 @@ impl Round0 {
         let (bc1, decom1) = sign_keys.phase1_broadcast();
 
         let party_ek = self.local_key.paillier_key_vec[usize::from(self.local_key.i - 1)].clone();
+        // let m_a = MessageA::a(&sign_keys.k_i, &party_ek, &[]);
         let m_a = MessageA::a(&sign_keys.k_i, &party_ek, &self.local_key.h1_h2_n_tilde_vec);
 
         output.push(Msg {
