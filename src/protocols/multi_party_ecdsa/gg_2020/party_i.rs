@@ -31,9 +31,7 @@ use curv::BigInt;
 use sha2::Sha256;
 
 use crate::Error::{self, InvalidSig, Phase5BadSum, Phase6Error};
-use paillier::{
-    Decrypt, DecryptionKey, EncryptionKey, KeyGeneration, Paillier, RawCiphertext, RawPlaintext,
-};
+use paillier::{Decrypt, DecryptionKey, EncryptionKey, KeyGeneration, Keypair, Paillier, RawCiphertext, RawPlaintext};
 
 use serde::{Deserialize, Serialize};
 use zk_paillier::zkproofs::NiCorrectKeyProof;
@@ -48,6 +46,12 @@ use std::convert::TryInto;
 const SECURITY: usize = 256;
 const PAILLIER_MIN_BIT_LENGTH: usize = 2047;
 const PAILLIER_MAX_BIT_LENGTH: usize = 2048;
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PreParams {
+    pub paillier_param :Keypair,
+    pub range_proof_param: Keypair
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Parameters {
@@ -134,10 +138,11 @@ pub struct SignatureRecid {
     pub recid: u8,
 }
 
-pub fn generate_h1_h2_N_tilde() -> (BigInt, BigInt, BigInt, BigInt, BigInt) {
+pub fn generate_h1_h2_N_tilde(key: Keypair) -> (BigInt, BigInt, BigInt, BigInt, BigInt) {
     // note, should be safe primes:
-    // let (ek_tilde, dk_tilde) = Paillier::keypair_safe_primes().keys();;
-    let (ek_tilde, dk_tilde) = Paillier::keypair().keys();
+    // let (ek_tilde, dk_tilde) = Paillier::keypair_safe_primes().keys();
+    // let (ek_tilde, dk_tilde) = Paillier::keypair().keys();
+    let (ek_tilde, dk_tilde) = key.keys();
     let one = BigInt::one();
     let phi = (&dk_tilde.p - &one) * (&dk_tilde.q - &one);
     let h1 = BigInt::sample_below(&ek_tilde.n);
@@ -156,11 +161,13 @@ pub fn generate_h1_h2_N_tilde() -> (BigInt, BigInt, BigInt, BigInt, BigInt) {
 }
 
 impl Keys {
-    pub fn create(index: usize) -> Self {
+    pub fn create(index: usize, param: PreParams) -> Self {
         let u = Scalar::<Secp256k1>::random();
         let y = Point::generator() * &u;
-        let (ek, dk) = Paillier::keypair().keys();
-        let (N_tilde, h1, h2, xhi, xhi_inv) = generate_h1_h2_N_tilde();
+        // let (ek, dk) = Paillier::keypair().keys();
+        // let (ek, dk) = Paillier::keypair_safe_primes().keys();
+        let (ek, dk) = param.paillier_param.keys();
+        let (N_tilde, h1, h2, xhi, xhi_inv) = generate_h1_h2_N_tilde(param.range_proof_param);
 
         Self {
             u_i: u,
@@ -182,7 +189,7 @@ impl Keys {
         let y = Point::generator() * &u;
 
         let (ek, dk) = Paillier::keypair_safe_primes().keys();
-        let (N_tilde, h1, h2, xhi, xhi_inv) = generate_h1_h2_N_tilde();
+        let (N_tilde, h1, h2, xhi, xhi_inv) = generate_h1_h2_N_tilde(Paillier::keypair_safe_primes());
 
         Self {
             u_i: u,
@@ -200,7 +207,7 @@ impl Keys {
     pub fn create_from(u: Scalar<Secp256k1>, index: usize) -> Self {
         let y = Point::generator() * &u;
         let (ek, dk) = Paillier::keypair().keys();
-        let (N_tilde, h1, h2, xhi, xhi_inv) = generate_h1_h2_N_tilde();
+        let (N_tilde, h1, h2, xhi, xhi_inv) = generate_h1_h2_N_tilde(Paillier::keypair());
 
         Self {
             u_i: u,
@@ -461,7 +468,7 @@ impl PartyPrivate {
         let y = Point::generator() * &u;
         let (ek, dk) = Paillier::keypair().keys();
 
-        let (N_tilde, h1, h2, xhi, xhi_inv) = generate_h1_h2_N_tilde();
+        let (N_tilde, h1, h2, xhi, xhi_inv) = generate_h1_h2_N_tilde(Paillier::keypair());
 
         Keys {
             u_i: u,
@@ -483,7 +490,7 @@ impl PartyPrivate {
         let y = Point::generator() * &u;
         let (ek, dk) = Paillier::keypair_safe_primes().keys();
 
-        let (N_tilde, h1, h2, xhi, xhi_inv) = generate_h1_h2_N_tilde();
+        let (N_tilde, h1, h2, xhi, xhi_inv) = generate_h1_h2_N_tilde(Paillier::keypair_safe_primes());
 
         Keys {
             u_i: u,

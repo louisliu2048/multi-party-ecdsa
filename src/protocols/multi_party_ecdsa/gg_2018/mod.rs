@@ -15,6 +15,9 @@
 */
 
 pub mod party_i;
+pub mod sign_rounds;
+pub mod keygen_rounds;
+pub mod msg;
 
 #[cfg(test)]
 mod test;

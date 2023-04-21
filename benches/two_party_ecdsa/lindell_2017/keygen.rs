@@ -5,10 +5,12 @@ mod bench {
     use curv::arithmetic::traits::Samplable;
     use curv::elliptic::curves::{secp256_k1::Secp256k1, Scalar};
     use curv::BigInt;
+    use paillier::{KeyGeneration, Paillier};
     use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
 
     pub fn bench_full_keygen_party_one_two(c: &mut Criterion) {
-        c.bench_function("keygen", move |b| {
+        let preParams = Paillier::keypair();
+        c.bench_function("lindell keygen", move |b| {
             b.iter(|| {
                 let (party_one_first_message, comm_witness, ec_key_pair_party1) =
                     party_one::KeyGenFirstMsg::create_commitments_with_fixed_secret_share(
@@ -34,7 +36,7 @@ mod bench {
                 // init paillier keypair:
                 let paillier_key_pair =
                     party_one::PaillierKeyPair::generate_keypair_and_encrypted_share(
-                        &ec_key_pair_party1,
+                        &ec_key_pair_party1,preParams.clone(),
                     );
 
                 let party_one_private = party_one::Party1Private::set_private_key(

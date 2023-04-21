@@ -23,6 +23,7 @@ mod rounds;
 use private::InternalError;
 pub use rounds::{LocalKey, ProceedError};
 use rounds::{Round0, Round1, Round2, Round3, Round4};
+use crate::protocols::multi_party_ecdsa::gg_2020::party_i::PreParams;
 
 /// Keygen protocol state machine
 ///
@@ -40,6 +41,7 @@ pub struct Keygen {
 
     party_i: u16,
     party_n: u16,
+    pre_params: PreParams,
 }
 
 impl Keygen {
@@ -53,7 +55,7 @@ impl Keygen {
     /// * `n` is less than 2, returns [Error::TooFewParties]
     /// * `t` is not in range `[1; n-1]`, returns [Error::InvalidThreshold]
     /// * `i` is not in range `[1; n]`, returns [Error::InvalidPartyIndex]
-    pub fn new(i: u16, t: u16, n: u16) -> Result<Self> {
+    pub fn new(i: u16, t: u16, n: u16, preParams: PreParams) -> Result<Self> {
         if n < 2 {
             return Err(Error::TooFewParties);
         }
@@ -75,6 +77,7 @@ impl Keygen {
 
             party_i: i,
             party_n: n,
+            pre_params: preParams,
         };
 
         state.proceed_round(false)?;
@@ -100,7 +103,7 @@ impl Keygen {
         let try_again: bool = match replace(&mut self.round, R::Gone) {
             R::Round0(round) if !round.is_expensive() || may_block => {
                 next_state = round
-                    .proceed(self.gmap_queue(M::Round1))
+                    .proceed(self.pre_params.clone(), self.gmap_queue(M::Round1))
                     .map(R::Round1)
                     .map_err(Error::ProceedRound)?;
                 true
@@ -491,6 +494,7 @@ mod private {
 
 #[cfg(test)]
 pub mod test {
+    use paillier::{KeyGeneration, Paillier};
     use round_based::dev::Simulation;
 
     use super::*;
@@ -500,7 +504,11 @@ pub mod test {
         simulation.enable_benchmarks(true);
 
         for i in 1..=n {
-            simulation.add_party(Keygen::new(i, t, n).unwrap());
+            let  pre_params = PreParams{
+                paillier_param: Paillier::keypair(),
+                range_proof_param: Paillier::keypair()
+            };
+            simulation.add_party(Keygen::new(i, t, n, pre_params).unwrap());
         }
 
         let keys = simulation.run().unwrap();

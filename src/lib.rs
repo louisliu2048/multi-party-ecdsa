@@ -18,6 +18,8 @@
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::type_complexity)]
 
+extern crate core;
+
 pub mod protocols;
 pub mod utilities;
 use std::fmt;

@@ -43,6 +43,7 @@ use crate::utilities::zk_pdl_with_slack::PDLwSlackProof;
 use curv::BigInt;
 use rounds::*;
 pub use rounds::{CompletedOfflineStage, Error as ProceedError, PartialSignature};
+use std::time::Instant;
 
 /// Offline Stage of GG20 signing
 ///
@@ -131,6 +132,7 @@ impl OfflineStage {
         let store5_wants_more = self.msgs5.as_ref().map(|s| s.wants_more()).unwrap_or(false);
         let store6_wants_more = self.msgs6.as_ref().map(|s| s.wants_more()).unwrap_or(false);
 
+        // let start = Instant::now();
         let next_state: OfflineR;
         let try_again: bool = match replace(&mut self.round, OfflineR::Gone) {
             OfflineR::R0(round) if !round.is_expensive() || may_block => {
@@ -138,6 +140,11 @@ impl OfflineStage {
                     .proceed(&mut self.msgs_queue)
                     .map(OfflineR::R1)
                     .map_err(Error::ProceedRound)?;
+
+                // let duration = start.elapsed();
+                // let ms = duration.as_millis();
+                // println!("round0! duration: {:?}ms",ms);
+
                 true
             }
             s @ OfflineR::R0(_) => {
@@ -153,6 +160,11 @@ impl OfflineStage {
                     .proceed(msgs, &mut self.msgs_queue)
                     .map(OfflineR::R2)
                     .map_err(Error::ProceedRound)?;
+
+                // let duration = start.elapsed();
+                // let ms = duration.as_millis();
+                // println!("round1! duration: {:?}ms",ms);
+
                 true
             }
             s @ OfflineR::R1(_) => {
@@ -168,6 +180,11 @@ impl OfflineStage {
                     .proceed(msgs, &mut self.msgs_queue)
                     .map(OfflineR::R3)
                     .map_err(Error::ProceedRound)?;
+
+                // let duration = start.elapsed();
+                // let ms = duration.as_millis();
+                // println!("round2! duration: {:?}ms",ms);
+
                 true
             }
             s @ OfflineR::R2(_) => {
@@ -183,6 +200,11 @@ impl OfflineStage {
                     .proceed(msgs, &mut self.msgs_queue)
                     .map(OfflineR::R4)
                     .map_err(Error::ProceedRound)?;
+
+                // let duration = start.elapsed();
+                // let ms = duration.as_millis();
+                // println!("round3! duration: {:?}ms",ms);
+
                 true
             }
             s @ OfflineR::R3(_) => {
@@ -198,6 +220,11 @@ impl OfflineStage {
                     .proceed(msgs, &mut self.msgs_queue)
                     .map(OfflineR::R5)
                     .map_err(Error::ProceedRound)?;
+
+                // let duration = start.elapsed();
+                // let ms = duration.as_millis();
+                // println!("round4! duration: {:?}ms",ms);
+
                 false
             }
             s @ OfflineR::R4(_) => {
@@ -213,6 +240,11 @@ impl OfflineStage {
                     .proceed(msgs, &mut self.msgs_queue)
                     .map(OfflineR::R6)
                     .map_err(Error::ProceedRound)?;
+
+                // let duration = start.elapsed();
+                // let ms = duration.as_millis();
+                // println!("round5! duration: {:?}ms",ms);
+
                 false
             }
             s @ OfflineR::R5(_) => {
@@ -228,6 +260,11 @@ impl OfflineStage {
                     .proceed(msgs)
                     .map(OfflineR::Finished)
                     .map_err(Error::ProceedRound)?;
+
+                // let duration = start.elapsed();
+                // let ms = duration.as_millis();
+                // println!("round6! duration: {:?}ms",ms);
+
                 false
             }
             s @ OfflineR::R6(_) => {

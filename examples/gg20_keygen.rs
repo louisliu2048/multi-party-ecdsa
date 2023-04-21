@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Context, Result};
 use futures::StreamExt;
 use std::path::PathBuf;
+use paillier::{KeyGeneration, Paillier};
 use structopt::StructOpt;
 
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::Keygen;
@@ -8,6 +9,7 @@ use round_based::async_runtime::AsyncProtocol;
 
 mod gg20_sm_client;
 use gg20_sm_client::join_computation;
+use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::party_i::PreParams;
 
 #[derive(Debug, StructOpt)]
 struct Cli {
@@ -44,7 +46,11 @@ async fn main() -> Result<()> {
     tokio::pin!(incoming);
     tokio::pin!(outgoing);
 
-    let keygen = Keygen::new(args.index, args.threshold, args.number_of_parties)?;
+    let  pre_params = PreParams{
+        paillier_param: Paillier::keypair(),
+        range_proof_param: Paillier::keypair()
+    };
+    let keygen = Keygen::new(args.index, args.threshold, args.number_of_parties, pre_params)?;
     let output = AsyncProtocol::new(keygen, incoming, outgoing)
         .run()
         .await

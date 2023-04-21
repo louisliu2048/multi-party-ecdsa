@@ -4,30 +4,42 @@ mod bench {
     use criterion::{criterion_group, Criterion};
     use curv::cryptographic_primitives::secret_sharing::feldman_vss::VerifiableSS;
     use curv::elliptic::curves::{secp256_k1::Secp256k1, Point, Scalar};
+    use paillier::{EncryptionKey, KeyGeneration, Keypair, Paillier};
+    use zk_paillier::zkproofs::DLogStatement;
     use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2018::party_i::*;
-    pub fn bench_full_keygen_party_one_two(c: &mut Criterion) {
-        c.bench_function("keygen t=1 n=2", move |b| {
+    pub fn bench_full_keygen_party_one_three(c: &mut Criterion) {
+        let mut preParamsVec = Vec::new();
+        for i in 0..3 {
+            let key = Paillier::keypair();
+            preParamsVec.push(key);
+        }
+        c.bench_function("keygen t=1 n=3", move |b| {
             b.iter(|| {
-                keygen_t_n_parties(1, 2);
+                keygen_t_n_parties(1, 3, preParamsVec.clone());
             })
         });
     }
-    pub fn bench_full_keygen_party_two_three(c: &mut Criterion) {
-        c.bench_function("keygen t=2 n=3", move |b| {
-            b.iter(|| {
-                keygen_t_n_parties(2, 3);
-            })
-        });
-    }
+
+    // pub fn bench_full_keygen_party_two_three(c: &mut Criterion) {
+    //     c.bench_function("keygen t=2 n=3", move |b| {
+    //         b.iter(|| {
+    //             keygen_t_n_parties(2, 3);
+    //         })
+    //     });
+    // }
+
     pub fn keygen_t_n_parties(
         t: u16,
         n: u16,
+        preParamsVec: Vec<Keypair>,
     ) -> (
         Vec<Keys>,
         Vec<SharedKeys>,
         Vec<Point<Secp256k1>>,
         Point<Secp256k1>,
         VerifiableSS<Secp256k1>,
+        Vec<EncryptionKey>,
+        Vec<DLogStatement>
     ) {
         let parames = Parameters {
             threshold: t,
@@ -35,7 +47,7 @@ mod bench {
         };
         let (t, n) = (t as usize, n as usize);
         let party_keys_vec = (0..n)
-            .map(|i| Keys::create(i as u16))
+            .map(|i| Keys::create_with_preParams(i as u16, preParamsVec[i].clone()))
             .collect::<Vec<Keys>>();
 
         let mut bc1_vec = Vec::new();
@@ -103,17 +115,26 @@ mod bench {
         //both parties run:
         Keys::verify_dlog_proofs(&parames, &dlog_proof_vec, &y_vec).expect("bad dlog proof");
 
-        //test
-        let xi_vec = (0..=t)
-            .map(|i| shared_keys_vec[i].x_i.clone())
-            .collect::<Vec<Scalar<Secp256k1>>>();
-        let x = vss_scheme_for_test[0]
-            .clone()
-            .reconstruct(&index_vec[0..=t], &xi_vec);
-        let sum_u_i = party_keys_vec
+        //save key to file:
+        let paillier_key_vec = (0..n)
+            .map(|i| bc1_vec[i as usize].e.clone())
+            .collect::<Vec<EncryptionKey>>();
+        let h1_h2_n_tilde_vec = bc1_vec
             .iter()
-            .fold(Scalar::<Secp256k1>::zero(), |acc, x| acc + &x.u_i);
-        assert_eq!(x, sum_u_i);
+            .map(|bc1| bc1.dlog_statement.clone())
+            .collect::<Vec<DLogStatement>>();
+
+        // //test
+        // let xi_vec = (0..=t)
+        //     .map(|i| shared_keys_vec[i].x_i.clone())
+        //     .collect::<Vec<Scalar<Secp256k1>>>();
+        // let x = vss_scheme_for_test[0]
+        //     .clone()
+        //     .reconstruct(&index_vec[0..=t], &xi_vec);
+        // let sum_u_i = party_keys_vec
+        //     .iter()
+        //     .fold(Scalar::<Secp256k1>::zero(), |acc, x| acc + &x.u_i);
+        // assert_eq!(x, sum_u_i);
 
         (
             party_keys_vec,
@@ -121,6 +142,8 @@ mod bench {
             pk_vec,
             y_sum,
             vss_scheme_for_test[0].clone(),
+            paillier_key_vec,
+            h1_h2_n_tilde_vec,
         )
     }
 
@@ -128,8 +151,7 @@ mod bench {
     name = keygen;
     config = Criterion::default().sample_size(10);
     targets =
-    self::bench_full_keygen_party_one_two,
-    self::bench_full_keygen_party_two_three}
+    self::bench_full_keygen_party_one_three}
 }
 
 criterion_main!(bench::keygen);

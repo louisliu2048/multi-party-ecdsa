@@ -29,11 +29,9 @@ use curv::cryptographic_primitives::proofs::sigma_dlog::DLogProof;
 use curv::cryptographic_primitives::secret_sharing::feldman_vss::VerifiableSS;
 use curv::elliptic::curves::{Curve, Point, Scalar, Secp256k1};
 use curv::BigInt;
-use paillier::{
-    Decrypt, DecryptionKey, EncryptionKey, KeyGeneration, Paillier, RawCiphertext, RawPlaintext,
-};
+use paillier::{Decrypt, DecryptionKey, EncryptionKey, KeyGeneration, Keypair, Paillier, RawCiphertext, RawPlaintext};
 use sha2::Sha256;
-use zk_paillier::zkproofs::NiCorrectKeyProof;
+use zk_paillier::zkproofs::{CompositeDLogProof, DLogStatement, NiCorrectKeyProof};
 
 use serde::{Deserialize, Serialize};
 
@@ -54,6 +52,11 @@ pub struct Keys<E: Curve = Secp256k1> {
     pub dk: DecryptionKey,
     pub ek: EncryptionKey,
     pub party_index: u16,
+    pub N_tilde: BigInt,
+    pub h1: BigInt,
+    pub h2: BigInt,
+    pub xhi: BigInt,
+    pub xhi_inv: BigInt,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -66,8 +69,11 @@ pub struct PartyPrivate {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct KeyGenBroadcastMessage1 {
     pub e: EncryptionKey,
+    pub dlog_statement: DLogStatement,
     pub com: BigInt,
     pub correct_key_proof: NiCorrectKeyProof,
+    pub composite_dlog_proof_base_h1: CompositeDLogProof,
+    pub composite_dlog_proof_base_h2: CompositeDLogProof,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -144,11 +150,33 @@ pub struct SignatureRecid {
     pub recid: u8,
 }
 
+pub fn generate_h1_h2_N_tilde(ek_tilde: EncryptionKey, dk_tilde: DecryptionKey) -> (BigInt, BigInt, BigInt, BigInt, BigInt) {
+    // note, should be safe primes:
+    // let (ek_tilde, dk_tilde) = Paillier::keypair_safe_primes().keys();;
+    // let (ek_tilde, dk_tilde) = Paillier::keypair().keys();
+    let one = BigInt::one();
+    let phi = (&dk_tilde.p - &one) * (&dk_tilde.q - &one);
+    let h1 = BigInt::sample_below(&ek_tilde.n);
+    let (mut xhi, mut xhi_inv) = loop {
+        let xhi_ = BigInt::sample_below(&phi);
+        match BigInt::mod_inv(&xhi_, &phi) {
+            Some(inv) => break (xhi_, inv),
+            None => continue,
+        }
+    };
+    let h2 = BigInt::mod_pow(&h1, &xhi, &ek_tilde.n);
+    xhi = BigInt::sub(&phi, &xhi);
+    xhi_inv = BigInt::sub(&phi, &xhi_inv);
+
+    (ek_tilde.n, h1, h2, xhi, xhi_inv)
+}
+
 impl Keys {
     pub fn create(index: u16) -> Self {
         let u = Scalar::<Secp256k1>::random();
         let y = Point::generator() * &u;
         let (ek, dk) = Paillier::keypair().keys();
+        let (N_tilde, h1, h2, xhi, xhi_inv) = generate_h1_h2_N_tilde(ek.clone(), dk.clone());
 
         Self {
             u_i: u,
@@ -156,6 +184,30 @@ impl Keys {
             dk,
             ek,
             party_index: index,
+            N_tilde,
+            h1,
+            h2,
+            xhi,
+            xhi_inv,
+        }
+    }
+    pub fn create_with_preParams(index: u16, key: Keypair) -> Keys {
+        let u = Scalar::<Secp256k1>::random();
+        let y = Point::generator() * &u;
+        let (ek, dk) = key.keys();
+        let (N_tilde, h1, h2, xhi, xhi_inv) = generate_h1_h2_N_tilde(ek.clone(), dk.clone());
+
+        Self {
+            u_i: u,
+            y_i: y,
+            dk,
+            ek,
+            party_index: index,
+            N_tilde,
+            h1,
+            h2,
+            xhi,
+            xhi_inv,
         }
     }
 
@@ -165,6 +217,7 @@ impl Keys {
         let y = Point::generator() * &u;
 
         let (ek, dk) = Paillier::keypair_safe_primes().keys();
+        let (N_tilde, h1, h2, xhi, xhi_inv) = generate_h1_h2_N_tilde(ek.clone(), dk.clone());
 
         Keys {
             u_i: u,
@@ -172,11 +225,17 @@ impl Keys {
             dk,
             ek,
             party_index: index,
+            N_tilde,
+            h1,
+            h2,
+            xhi,
+            xhi_inv,
         }
     }
     pub fn create_from(u: Scalar<Secp256k1>, index: u16) -> Keys {
         let y = Point::generator() * &u;
         let (ek, dk) = Paillier::keypair().keys();
+        let (N_tilde, h1, h2, xhi, xhi_inv) = generate_h1_h2_N_tilde(ek.clone(), dk.clone());
 
         Self {
             u_i: u,
@@ -184,6 +243,11 @@ impl Keys {
             dk,
             ek,
             party_index: index,
+            N_tilde,
+            h1,
+            h2,
+            xhi,
+            xhi_inv,
         }
     }
 
@@ -192,19 +256,51 @@ impl Keys {
     ) -> (KeyGenBroadcastMessage1, KeyGenDecommitMessage1) {
         let blind_factor = BigInt::sample(SECURITY);
         let correct_key_proof = NiCorrectKeyProof::proof(&self.dk, None);
+
+        let dlog_statement_base_h1 = DLogStatement {
+            N: self.N_tilde.clone(),
+            g: self.h1.clone(),
+            ni: self.h2.clone(),
+        };
+        let dlog_statement_base_h2 = DLogStatement {
+            N: self.N_tilde.clone(),
+            g: self.h2.clone(),
+            ni: self.h1.clone(),
+        };
+
+        let composite_dlog_proof_base_h1 =
+            CompositeDLogProof::prove(&dlog_statement_base_h1, &self.xhi);
+        let composite_dlog_proof_base_h2 =
+            CompositeDLogProof::prove(&dlog_statement_base_h2, &self.xhi_inv);
+
         let com = HashCommitment::<Sha256>::create_commitment_with_user_defined_randomness(
             &BigInt::from_bytes(self.y_i.to_bytes(true).as_ref()),
             &blind_factor,
         );
+
+        // let bcm1 = KeyGenBroadcastMessage1 {
+        //     e: self.ek.clone(),
+        //     com,
+        //     correct_key_proof,
+        // };
+        // let decom1 = KeyGenDecommitMessage1 {
+        //     blind_factor,
+        //     y_i: self.y_i.clone(),
+        // };
+
         let bcm1 = KeyGenBroadcastMessage1 {
             e: self.ek.clone(),
+            dlog_statement: dlog_statement_base_h1,
             com,
             correct_key_proof,
+            composite_dlog_proof_base_h1,
+            composite_dlog_proof_base_h2,
         };
         let decom1 = KeyGenDecommitMessage1 {
             blind_factor,
             y_i: self.y_i.clone(),
         };
+
         (bcm1, decom1)
     }
 
@@ -230,8 +326,11 @@ impl Keys {
                     .is_ok()
         });
 
+        // vss_scheme: 生成的多项式系数ai在曲线上的值：g^ai
+        // secret_shares: 生成的f(i)以及多项式的系数数组[a0, a1, a2, ...]
         let (vss_scheme, secret_shares) =
             VerifiableSS::share(params.threshold, params.share_count, &self.u_i);
+
         if correct_key_correct_decom_all {
             Ok((vss_scheme, secret_shares.to_vec(), self.party_index))
         } else {
@@ -243,8 +342,8 @@ impl Keys {
         &self,
         params: &Parameters,
         y_vec: &[Point<Secp256k1>],
-        secret_shares_vec: &[Scalar<Secp256k1>],
-        vss_scheme_vec: &[VerifiableSS<Secp256k1>],
+        secret_shares_vec: &[Scalar<Secp256k1>], // 别人以及自己给我生成的f_j(i)
+        vss_scheme_vec: &[VerifiableSS<Secp256k1>], //所有人的多项式系数数组[[g^a0, g^a1, g^a2,...],[],[]]
         index: u16,
     ) -> Result<(SharedKeys, DLogProof<Secp256k1, Sha256>), Error> {
         assert_eq!(y_vec.len(), usize::from(params.share_count));
@@ -332,6 +431,7 @@ impl PartyPrivate {
         let u: Scalar<Secp256k1> = &self.u_i + factor;
         let y = Point::generator() * &u;
         let (ek, dk) = Paillier::keypair().keys();
+        let (N_tilde, h1, h2, xhi, xhi_inv) = generate_h1_h2_N_tilde(ek.clone(), dk.clone());
 
         Keys {
             u_i: u,
@@ -339,6 +439,11 @@ impl PartyPrivate {
             dk,
             ek,
             party_index: index,
+            N_tilde,
+            h1,
+            h2,
+            xhi,
+            xhi_inv,
         }
     }
 
@@ -347,6 +452,7 @@ impl PartyPrivate {
         let u: Scalar<Secp256k1> = &self.u_i + factor;
         let y = Point::generator() * &u;
         let (ek, dk) = Paillier::keypair_safe_primes().keys();
+        let (N_tilde, h1, h2, xhi, xhi_inv) = generate_h1_h2_N_tilde(ek.clone(), dk.clone());
 
         Keys {
             u_i: u,
@@ -354,6 +460,11 @@ impl PartyPrivate {
             dk,
             ek,
             party_index: index,
+            N_tilde,
+            h1,
+            h2,
+            xhi,
+            xhi_inv,
         }
     }
 
@@ -497,7 +608,7 @@ impl LocalSignature {
                 .unwrap()
                 .mod_floor(Scalar::<Secp256k1>::group_order()),
         );
-        let s_i = m_fe * k_i + r * sigma_i;
+        let s_i = m_fe * k_i + r * sigma_i; // 算出自己这部分si
         let l_i = Scalar::<Secp256k1>::random();
         let rho_i = Scalar::<Secp256k1>::random();
         Self {
@@ -520,13 +631,14 @@ impl LocalSignature {
     ) {
         let blind_factor = BigInt::sample(SECURITY);
         let g = Point::generator();
-        let A_i = g * &self.rho_i;
-        let l_i_rho_i = &self.l_i * &self.rho_i;
-        let B_i = g * l_i_rho_i;
-        let V_i = &self.R * &self.s_i + g * &self.l_i;
+        let A_i = g * &self.rho_i; // Ai = g^ρi
+        let l_i_rho_i = &self.l_i * &self.rho_i; // li*ρi
+        let B_i = g * l_i_rho_i; // g^(li*ρi)
+        let V_i = &self.R * &self.s_i + g * &self.l_i; // R*si + li
         let input_hash = Sha256::new()
             .chain_points([&V_i, &A_i, &B_i])
             .result_bigint();
+        // Hash(tmp || Vi || Ai || Bi)
         let com = HashCommitment::<Sha256>::create_commitment_with_user_defined_randomness(
             &input_hash,
             &blind_factor,

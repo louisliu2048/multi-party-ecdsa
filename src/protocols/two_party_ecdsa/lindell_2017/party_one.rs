@@ -26,7 +26,7 @@ use curv::cryptographic_primitives::proofs::sigma_ec_ddh::*;
 use curv::cryptographic_primitives::proofs::ProofError;
 use curv::elliptic::curves::{secp256_k1::Secp256k1, Point, Scalar};
 use curv::BigInt;
-use paillier::Paillier;
+use paillier::{Keypair, Paillier};
 use paillier::{Decrypt, EncryptWithChosenRandomness, KeyGeneration};
 use paillier::{DecryptionKey, EncryptionKey, Randomness, RawCiphertext, RawPlaintext};
 use serde::{Deserialize, Serialize};
@@ -50,7 +50,7 @@ use zk_paillier::zkproofs::{CompositeDLogProof, DLogStatement};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EcKeyPair {
     pub public_share: Point<Secp256k1>,
-    secret_share: Scalar<Secp256k1>,
+    pub secret_share: Scalar<Secp256k1>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -72,7 +72,7 @@ pub struct KeyGenSecondMsg {
     pub comm_witness: CommWitness,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PaillierKeyPair {
     pub ek: EncryptionKey,
     dk: DecryptionKey,
@@ -316,10 +316,12 @@ impl Party1Private {
 }
 
 impl PaillierKeyPair {
-    pub fn generate_keypair_and_encrypted_share(keygen: &EcKeyPair) -> PaillierKeyPair {
-        let (ek, dk) = Paillier::keypair().keys();
+    pub fn generate_keypair_and_encrypted_share(keygen: &EcKeyPair, key: Keypair) -> PaillierKeyPair {
+        // let (ek, dk) = Paillier::keypair().keys();
+        let (ek, dk) = key.keys();
         let randomness = Randomness::sample(&ek);
 
+        // 计算Enk(x_1)
         let encrypted_share = Paillier::encrypt_with_chosen_randomness(
             &ek,
             RawPlaintext::from(keygen.secret_share.to_bigint()),
@@ -367,7 +369,7 @@ impl PaillierKeyPair {
         party1_private: &Party1Private,
         paillier_key_pair: &PaillierKeyPair,
     ) -> (PDLwSlackStatement, PDLwSlackProof, CompositeDLogProof) {
-        let (n_tilde, h1, h2, xhi) = generate_h1_h2_n_tilde();
+        let (n_tilde, h1, h2, xhi) = generate_h1_h2_n_tilde(paillier_key_pair.ek.clone(), paillier_key_pair.dk.clone());
         let dlog_statement = DLogStatement {
             N: n_tilde,
             g: h1,
@@ -591,10 +593,10 @@ pub fn verify(
     }
 }
 
-pub fn generate_h1_h2_n_tilde() -> (BigInt, BigInt, BigInt, BigInt) {
+pub fn generate_h1_h2_n_tilde(ek_tilde : EncryptionKey, dk_tilde: DecryptionKey) -> (BigInt, BigInt, BigInt, BigInt) {
     //note, should be safe primes:
     // let (ek_tilde, dk_tilde) = Paillier::keypair_safe_primes().keys();;
-    let (ek_tilde, dk_tilde) = Paillier::keypair().keys();
+    // let (ek_tilde, dk_tilde) = Paillier::keypair().keys();
     let one = BigInt::one();
     let phi = (&dk_tilde.p - &one) * (&dk_tilde.q - &one);
     let h1 = BigInt::sample_below(&phi);

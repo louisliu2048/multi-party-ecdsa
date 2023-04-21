@@ -4,6 +4,7 @@ use crate::protocols::two_party_ecdsa::lindell_2017::{party_one, party_two};
 use curv::arithmetic::traits::Samplable;
 use curv::elliptic::curves::{secp256_k1::Secp256k1, Scalar};
 use curv::BigInt;
+use paillier::{KeyGeneration, Paillier};
 
 #[test]
 fn test_d_log_proof_party_two_party_one() {
@@ -46,9 +47,10 @@ fn test_full_key_gen() {
     )
     .expect("failed to verify commitments and DLog proof");
 
+    let preParams = Paillier::keypair();
     // init paillier keypair:
     let paillier_key_pair =
-        party_one::PaillierKeyPair::generate_keypair_and_encrypted_share(&ec_key_pair_party1);
+        party_one::PaillierKeyPair::generate_keypair_and_encrypted_share(&ec_key_pair_party1, preParams);
 
     let party_one_private =
         party_one::Party1Private::set_private_key(&ec_key_pair_party1, &paillier_key_pair);
@@ -86,39 +88,46 @@ fn test_two_party_sign() {
     // assume party1 and party2 engaged with KeyGen in the past resulting in
     // party1 owning private share and paillier key-pair
     // party2 owning private share and paillier encryption of party1 share
+
+    // ec_key_pair: 自己随机生成的<x, y> = <x, g^x>
     let (_party_one_private_share_gen, _comm_witness, ec_key_pair_party1) =
         party_one::KeyGenFirstMsg::create_commitments();
+
+    // ec_key_pair：自己随机生成的<x, y> = <x, g^x>
     let (party_two_private_share_gen, ec_key_pair_party2) = party_two::KeyGenFirstMsg::create();
 
+    let preParams = Paillier::keypair();
+    // 生成paillier加密公私钥，并且对x1进行同态加密：Enc(x_1)
     let keypair =
-        party_one::PaillierKeyPair::generate_keypair_and_encrypted_share(&ec_key_pair_party1);
+        party_one::PaillierKeyPair::generate_keypair_and_encrypted_share(&ec_key_pair_party1, preParams);
 
     // creating the ephemeral private shares:
-
+    // 这是干了啥？貌似做了随机生成k1和k2以及对应的R1=g^k1和R2=g^k2
     let (eph_party_two_first_message, eph_comm_witness, eph_ec_key_pair_party2) =
         party_two::EphKeyGenFirstMsg::create_commitments();
     let (eph_party_one_first_message, eph_ec_key_pair_party1) =
         party_one::EphKeyGenFirstMsg::create();
+
     let eph_party_two_second_message = party_two::EphKeyGenSecondMsg::verify_and_decommit(
-        eph_comm_witness,
+        eph_comm_witness, // 这是p2本来应该传递给p1的
         &eph_party_one_first_message,
     )
     .expect("party1 DLog proof failed");
-
     let _eph_party_one_second_message =
         party_one::EphKeyGenSecondMsg::verify_commitments_and_dlog_proof(
             &eph_party_two_first_message,
             &eph_party_two_second_message,
         )
         .expect("failed to verify commitments and DLog proof");
+
     let party2_private = party_two::Party2Private::set_private_key(&ec_key_pair_party2);
     let message = BigInt::from(1234);
     let partial_sig = party_two::PartialSig::compute(
-        &keypair.ek,
-        &keypair.encrypted_share,
-        &party2_private,
-        &eph_ec_key_pair_party2,
-        &eph_party_one_first_message.public_share,
+        &keypair.ek, // node1的paillier公钥
+        &keypair.encrypted_share, // node1的Enc(x_1)
+        &party2_private, // node2的私钥x2
+        &eph_ec_key_pair_party2, // 包含了k2
+        &eph_party_one_first_message.public_share, // 包含了R1 = g^k1
         &message,
     );
 
@@ -127,8 +136,8 @@ fn test_two_party_sign() {
     let signature = party_one::Signature::compute(
         &party1_private,
         &partial_sig.c3,
-        &eph_ec_key_pair_party1,
-        &eph_party_two_second_message.comm_witness.public_share,
+        &eph_ec_key_pair_party1, // 包含k1
+        &eph_party_two_second_message.comm_witness.public_share, // 包含了R2 = g^k2
     );
 
     let pubkey =

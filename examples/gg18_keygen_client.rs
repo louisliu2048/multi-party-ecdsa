@@ -17,6 +17,7 @@ use paillier::EncryptionKey;
 use reqwest::Client;
 use sha2::Sha256;
 use std::{env, fs, time};
+use zk_paillier::zkproofs::DLogStatement;
 
 mod common;
 use common::{
@@ -102,7 +103,7 @@ fn main() {
     let mut j = 0;
     let mut point_vec: Vec<Point<Secp256k1>> = Vec::new();
     let mut decom_vec: Vec<KeyGenDecommitMessage1> = Vec::new();
-    let mut enc_keys: Vec<Vec<u8>> = Vec::new();
+    let mut enc_keys: Vec<Vec<u8>> = Vec::new(); // μi * g^μj
     for i in 1..=PARTIES {
         if i == party_num_int {
             point_vec.push(decom_i.y_i.clone());
@@ -111,20 +112,24 @@ fn main() {
             let decom_j: KeyGenDecommitMessage1 = serde_json::from_str(&round2_ans_vec[j]).unwrap();
             point_vec.push(decom_j.y_i.clone());
             decom_vec.push(decom_j.clone());
+
             let key_bn: BigInt = (decom_j.y_i.clone() * party_keys.u_i.clone())
                 .x_coord()
                 .unwrap();
             let key_bytes = BigInt::to_bytes(&key_bn);
             let mut template: Vec<u8> = vec![0u8; AES_KEY_BYTES_LEN - key_bytes.len()];
             template.extend_from_slice(&key_bytes[..]);
-            enc_keys.push(template);
+            enc_keys.push(template); // 这是在做什么？
             j += 1;
         }
     }
 
+    // 骚操作太多，就是在做∑yi, 其中yi = g^μi，得到的结果就是公钥
     let (head, tail) = point_vec.split_at(1);
     let y_sum = tail.iter().fold(head[0].clone(), |acc, x| acc + x);
 
+    // vss_scheme: 生成的多项式系数ai在曲线上的值：g^ai
+    // secret_shares: 生成的f(i)以及多项式的系数数组[a0, a1, a2, ...]
     let (vss_scheme, secret_shares, _index) = party_keys
         .phase1_verify_com_phase3_verify_correct_key_phase2_distribute(
             &params, &decom_vec, &bc1_vec,
@@ -137,8 +142,8 @@ fn main() {
     for (k, i) in (1..=PARTIES).enumerate() {
         if i != party_num_int {
             // prepare encrypted ss for party i:
-            let key_i = &enc_keys[j];
-            let plaintext = BigInt::to_bytes(&secret_shares[k].to_bigint());
+            let key_i = &enc_keys[j]; // μi * g^μj
+            let plaintext = BigInt::to_bytes(&secret_shares[k].to_bigint()); // 这玩意就是f(j)？ 是的
             let aead_pack_i = aes_encrypt(key_i, &plaintext);
             assert!(sendp2p(
                 &client,
@@ -163,7 +168,7 @@ fn main() {
     );
 
     let mut j = 0;
-    let mut party_shares: Vec<Scalar<Secp256k1>> = Vec::new();
+    let mut party_shares: Vec<Scalar<Secp256k1>> = Vec::new(); // 别人以及自己给我生成的f_j(i)
     for i in 1..=PARTIES {
         if i == party_num_int {
             party_shares.push(secret_shares[(i - 1) as usize].clone());
@@ -198,7 +203,7 @@ fn main() {
     );
 
     let mut j = 0;
-    let mut vss_scheme_vec: Vec<VerifiableSS<Secp256k1>> = Vec::new();
+    let mut vss_scheme_vec: Vec<VerifiableSS<Secp256k1>> = Vec::new(); // 所有人的多项式系数数组[[g^a0, g^a1, g^a2,...],[],[]]
     for i in 1..=PARTIES {
         if i == party_num_int {
             vss_scheme_vec.push(vss_scheme.clone());
@@ -210,12 +215,14 @@ fn main() {
         }
     }
 
+    // shared_keys: 自己得到的xi私钥，以及全局公钥
+    // dlog_proof: 自己得到的xi私钥分片的离散对数证明
     let (shared_keys, dlog_proof) = party_keys
         .phase2_verify_vss_construct_keypair_phase3_pok_dlog(
             &params,
-            &point_vec,
-            &party_shares,
-            &vss_scheme_vec,
+            &point_vec, // 所有人的yi
+            &party_shares, // 别人以及自己给我生成的f_j(i)
+            &vss_scheme_vec,  //所有人的多项式系数数组[[g^a0, g^a1, g^a2,...],[],[]]
             party_num_int,
         )
         .expect("invalid vss");
@@ -233,6 +240,7 @@ fn main() {
         poll_for_broadcasts(&client, party_num_int, PARTIES, delay, "round5", uuid);
 
     let mut j = 0;
+    // dlog_proof_vec: 所有人的xi私钥分片的离散对数证明
     let mut dlog_proof_vec: Vec<DLogProof<Secp256k1, Sha256>> = Vec::new();
     for i in 1..=PARTIES {
         if i == party_num_int {
@@ -244,20 +252,26 @@ fn main() {
             j += 1;
         }
     }
+    // point_vec 所有人的yi
     Keys::verify_dlog_proofs(&params, &dlog_proof_vec, &point_vec).expect("bad dlog proof");
 
     //save key to file:
     let paillier_key_vec = (0..PARTIES)
         .map(|i| bc1_vec[i as usize].e.clone())
         .collect::<Vec<EncryptionKey>>();
+    let h1_h2_n_tilde_vec = bc1_vec
+        .iter()
+        .map(|bc1| bc1.dlog_statement.clone())
+        .collect::<Vec<DLogStatement>>();
 
     let keygen_json = serde_json::to_string(&(
-        party_keys,
-        shared_keys,
-        party_num_int,
-        vss_scheme_vec,
-        paillier_key_vec,
+        party_keys, // 我自己的Paillier公私钥相关信息
+        shared_keys, // 自己得到的私钥分片，及全局公钥
+        party_num_int, // 自己在这次keygen中对应的index
+        vss_scheme_vec, // 所有人的多项式系数数组[[g^a0, g^a1, g^a2,...],[],[]]
+        paillier_key_vec, // 别人的Paillier 公钥
         y_sum,
+        h1_h2_n_tilde_vec,
     ))
     .unwrap();
     fs::write(env::args().nth(2).unwrap(), keygen_json).expect("Unable to save !");
