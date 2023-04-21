@@ -4,6 +4,7 @@ use crate::protocols::two_party_ecdsa::lindell_2017::{party_one, party_two};
 use curv::arithmetic::traits::Samplable;
 use curv::elliptic::curves::{secp256_k1::Secp256k1, Scalar};
 use curv::BigInt;
+use paillier::{KeyGeneration, Paillier};
 
 #[test]
 fn test_d_log_proof_party_two_party_one() {
@@ -46,9 +47,10 @@ fn test_full_key_gen() {
     )
     .expect("failed to verify commitments and DLog proof");
 
+    let preParams = Paillier::keypair();
     // init paillier keypair:
     let paillier_key_pair =
-        party_one::PaillierKeyPair::generate_keypair_and_encrypted_share(&ec_key_pair_party1);
+        party_one::PaillierKeyPair::generate_keypair_and_encrypted_share(&ec_key_pair_party1, preParams);
 
     let party_one_private =
         party_one::Party1Private::set_private_key(&ec_key_pair_party1, &paillier_key_pair);
@@ -94,9 +96,10 @@ fn test_two_party_sign() {
     // ec_key_pair：自己随机生成的<x, y> = <x, g^x>
     let (party_two_private_share_gen, ec_key_pair_party2) = party_two::KeyGenFirstMsg::create();
 
+    let preParams = Paillier::keypair();
     // 生成paillier加密公私钥，并且对x1进行同态加密：Enc(x_1)
     let keypair =
-        party_one::PaillierKeyPair::generate_keypair_and_encrypted_share(&ec_key_pair_party1);
+        party_one::PaillierKeyPair::generate_keypair_and_encrypted_share(&ec_key_pair_party1, preParams);
 
     // creating the ephemeral private shares:
     // 这是干了啥？貌似做了随机生成k1和k2以及对应的R1=g^k1和R2=g^k2

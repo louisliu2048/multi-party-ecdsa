@@ -29,9 +29,7 @@ use curv::cryptographic_primitives::proofs::sigma_dlog::DLogProof;
 use curv::cryptographic_primitives::secret_sharing::feldman_vss::VerifiableSS;
 use curv::elliptic::curves::{Curve, Point, Scalar, Secp256k1};
 use curv::BigInt;
-use paillier::{
-    Decrypt, DecryptionKey, EncryptionKey, KeyGeneration, Paillier, RawCiphertext, RawPlaintext,
-};
+use paillier::{Decrypt, DecryptionKey, EncryptionKey, KeyGeneration, Keypair, Paillier, RawCiphertext, RawPlaintext};
 use sha2::Sha256;
 use zk_paillier::zkproofs::{CompositeDLogProof, DLogStatement, NiCorrectKeyProof};
 
@@ -178,6 +176,25 @@ impl Keys {
         let u = Scalar::<Secp256k1>::random();
         let y = Point::generator() * &u;
         let (ek, dk) = Paillier::keypair().keys();
+        let (N_tilde, h1, h2, xhi, xhi_inv) = generate_h1_h2_N_tilde(ek.clone(), dk.clone());
+
+        Self {
+            u_i: u,
+            y_i: y,
+            dk,
+            ek,
+            party_index: index,
+            N_tilde,
+            h1,
+            h2,
+            xhi,
+            xhi_inv,
+        }
+    }
+    pub fn create_with_preParams(index: u16, key: Keypair) -> Keys {
+        let u = Scalar::<Secp256k1>::random();
+        let y = Point::generator() * &u;
+        let (ek, dk) = key.keys();
         let (N_tilde, h1, h2, xhi, xhi_inv) = generate_h1_h2_N_tilde(ek.clone(), dk.clone());
 
         Self {

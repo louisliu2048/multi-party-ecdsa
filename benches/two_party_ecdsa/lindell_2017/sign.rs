@@ -7,6 +7,7 @@ mod bench {
     use curv::cryptographic_primitives::secret_sharing::feldman_vss::VerifiableSS;
     use curv::elliptic::curves::{Point, Scalar, Secp256k1};
     use futures::future::ok;
+    use paillier::{KeyGeneration, Paillier};
     use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2018::keygen_rounds::LocalPartySaveData;
     use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
     use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::{EcKeyPair, PaillierKeyPair};
@@ -16,8 +17,9 @@ mod bench {
         let (_party_one_private_share_gen, _comm_witness, ec_key_pair_party1) =
             party_one::KeyGenFirstMsg::create_commitments();
 
+        let preParams = Paillier::keypair();
         let keypair = PaillierKeyPair::generate_keypair_and_encrypted_share(
-            &ec_key_pair_party1,
+            &ec_key_pair_party1,preParams,
         );
 
         (

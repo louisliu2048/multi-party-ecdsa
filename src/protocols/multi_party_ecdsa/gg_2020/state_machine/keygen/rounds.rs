@@ -6,15 +6,13 @@ use sha2::Sha256;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use paillier::EncryptionKey;
+use paillier::{EncryptionKey, Keypair};
 use round_based::containers::push::Push;
 use round_based::containers::{self, BroadcastMsgs, P2PMsgs, Store};
 use round_based::Msg;
 use zk_paillier::zkproofs::DLogStatement;
 
-use crate::protocols::multi_party_ecdsa::gg_2020::party_i::{
-    KeyGenBroadcastMessage1, KeyGenDecommitMessage1, Keys,
-};
+use crate::protocols::multi_party_ecdsa::gg_2020::party_i::{KeyGenBroadcastMessage1, KeyGenDecommitMessage1, Keys, PreParams};
 use crate::protocols::multi_party_ecdsa::gg_2020::{self, ErrorType};
 
 pub struct Round0 {
@@ -24,11 +22,11 @@ pub struct Round0 {
 }
 
 impl Round0 {
-    pub fn proceed<O>(self, mut output: O) -> Result<Round1>
+    pub fn proceed<O>(self, params: PreParams, mut output: O) -> Result<Round1>
     where
         O: Push<Msg<gg_2020::party_i::KeyGenBroadcastMessage1>>,
     {
-        let party_keys = Keys::create(self.party_i as usize);
+        let party_keys = Keys::create(self.party_i as usize, params);
         let (bc1, decom1) =
             party_keys.phase1_broadcast_phase3_proof_of_correct_key_proof_of_correct_h1h2();
 

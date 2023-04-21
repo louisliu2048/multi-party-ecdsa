@@ -9,7 +9,7 @@ mod bench {
     use multi_party_ecdsa::protocols::two_party_ecdsa::cclst_2019::{party_one, party_two};
 
     pub fn bench_full_keygen_party_one_two(c: &mut Criterion) {
-        c.bench_function("keygen", move |b| {
+        c.bench_function("cclst keygen", move |b| {
             b.iter(|| {
 
                 let (party_one_first_message, comm_witness, ec_key_pair_party1) =

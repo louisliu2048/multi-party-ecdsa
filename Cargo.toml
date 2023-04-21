@@ -124,6 +124,11 @@ path = "benches/multi_party_ecdsa/gg20/sign_raw.rs"
 harness = false
 
 [[bench]]
+name = "gg20_keygen"
+path = "benches/multi_party_ecdsa/gg20/keygen.rs"
+harness = false
+
+[[bench]]
 name = "lindel2017_keygen"
 path = "benches/two_party_ecdsa/lindell_2017/keygen.rs"
 harness = false

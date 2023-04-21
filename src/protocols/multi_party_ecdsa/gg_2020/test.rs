@@ -18,7 +18,7 @@
 use crate::protocols::multi_party_ecdsa::gg_2020::blame::{
     GlobalStatePhase5, GlobalStatePhase6, GlobalStatePhase7, LocalStatePhase5, LocalStatePhase6,
 };
-use crate::protocols::multi_party_ecdsa::gg_2020::party_i::SignatureRecid;
+use crate::protocols::multi_party_ecdsa::gg_2020::party_i::{PreParams, SignatureRecid};
 use crate::protocols::multi_party_ecdsa::gg_2020::party_i::{
     KeyGenBroadcastMessage1, KeyGenDecommitMessage1, Keys, LocalSignature, Parameters, SharedKeys,
     SignKeys,
@@ -41,6 +41,11 @@ use std::time::Instant;
 #[test]
 fn test_keygen_t1_n2() {
     assert!(keygen_t_n_parties(1, 2).is_ok());
+}
+
+#[test]
+fn test_keygen_t1_n3() {
+    assert!(keygen_t_n_parties(1, 3).is_ok());
 }
 
 #[test]
@@ -168,7 +173,13 @@ fn keygen_t_n_parties(
         share_count: n,
     };
     let (t, n) = (t as usize, n as usize);
-    let party_keys_vec = (0..n).map(Keys::create).collect::<Vec<Keys>>();
+    let party_keys_vec = (0..n).map(|idx| {
+        let  pre_params = PreParams{
+            paillier_param: Paillier::keypair(),
+            range_proof_param: Paillier::keypair()
+        };
+        return Keys::create(idx, pre_params);
+    }).collect::<Vec<Keys>>();
 
     let (bc1_vec, decom_vec): (Vec<_>, Vec<_>) = party_keys_vec
         .iter()
@@ -757,7 +768,11 @@ fn check_sig(r: &Scalar<Secp256k1>, s: &Scalar<Secp256k1>, msg: &BigInt, pk: &Po
 fn test_serialize_deserialize() {
     use serde_json;
 
-    let k = Keys::create(0);
+    let  pre_params = PreParams{
+        paillier_param: Paillier::keypair(),
+        range_proof_param: Paillier::keypair()
+    };
+    let k = Keys::create(0, pre_params);
     let (commit, decommit) = k.phase1_broadcast_phase3_proof_of_correct_key_proof_of_correct_h1h2();
 
     let encoded = serde_json::to_string(&commit).unwrap();
@@ -771,7 +786,11 @@ fn test_serialize_deserialize() {
 #[test]
 fn test_small_paillier() {
     // parties shouldn't be able to choose small Paillier modulus
-    let mut k = Keys::create(0);
+    let  pre_params = PreParams{
+        paillier_param: Paillier::keypair(),
+        range_proof_param: Paillier::keypair()
+    };
+    let mut k = Keys::create(0, pre_params);
     // creating 2046-bit Paillier
     let (ek, dk) = Paillier::keypair_with_modulus_size(2046).keys();
     k.dk = dk;
