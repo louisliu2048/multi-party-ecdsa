@@ -73,8 +73,9 @@ pub struct PaillierPublic {
     pub encrypted_secret_share: BigInt,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PartialSig {
+    #[serde(with = "paillier::serialize::bigint")]
     pub c3: BigInt,
 }
 
@@ -117,7 +118,9 @@ pub struct EphEcKeyPair {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EphCommWitness {
+    #[serde(with = "paillier::serialize::bigint")]
     pub pk_commitment_blind_factor: BigInt,
+    #[serde(with = "paillier::serialize::bigint")]
     pub zk_pok_blind_factor: BigInt,
     pub public_share: Point<Secp256k1>,
     pub d_log_proof: ECDDHProof<Secp256k1, Sha256>,
@@ -126,11 +129,13 @@ pub struct EphCommWitness {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EphKeyGenFirstMsg {
+    #[serde(with = "paillier::serialize::bigint")]
     pub pk_commitment: BigInt,
+    #[serde(with = "paillier::serialize::bigint")]
     pub zk_pok_commitment: BigInt,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EphKeyGenSecondMsg {
     pub comm_witness: EphCommWitness,
 }
@@ -419,6 +424,33 @@ impl PartialSig {
         //c3:
         PartialSig {
             c3: Paillier::add(ek, c2, c1).0.into_owned(),
+        }
+    }
+
+    pub fn compute_add(
+        ek: &EncryptionKey,                              // node1的paillier key的公钥
+        encrypted_secret_share: &BigInt,                 // node1的Enc(x1)
+        local_share: &Party2Private,                     // node2的x2
+        ephemeral_local_share: &EphEcKeyPair,            // K2
+        ephemeral_other_public_share: &Point<Secp256k1>, // K1G
+        message: &BigInt,
+    ) -> PartialSig {
+        let q = Scalar::<Secp256k1>::group_order();
+        //compute r = k2* R1
+        let r = ephemeral_other_public_share * &ephemeral_local_share.secret_share; // R = K2*K1G
+        let rx = r.x_coord().unwrap().mod_floor(q);
+        let rho = BigInt::sample_below(&q.pow(2));
+        let k2_inv = BigInt::mod_inv(&ephemeral_local_share.secret_share.to_bigint(), q).unwrap();
+        let partial_sig = rho * q + BigInt::mod_mul(&k2_inv, message, q);
+        let c1 = Paillier::encrypt(ek, RawPlaintext::from(partial_sig));
+
+        let c2 = Paillier::encrypt(ek, RawPlaintext::from(local_share.x2.to_bigint()));
+        let c3 = Paillier::add(ek, RawCiphertext::from(encrypted_secret_share.clone()), c2);
+        let v = BigInt::mod_mul(&rx, &k2_inv, q);
+        let c4 = Paillier::mul(ek, c3, RawPlaintext::from(v));
+
+        PartialSig {
+            c3: Paillier::add(ek, c1, c4).0.into_owned(),
         }
     }
 }

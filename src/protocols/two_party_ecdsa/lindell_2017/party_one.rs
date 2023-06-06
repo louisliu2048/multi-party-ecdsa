@@ -26,9 +26,9 @@ use curv::cryptographic_primitives::proofs::sigma_ec_ddh::*;
 use curv::cryptographic_primitives::proofs::ProofError;
 use curv::elliptic::curves::{secp256_k1::Secp256k1, Point, Scalar};
 use curv::BigInt;
-use paillier::Paillier;
 use paillier::{Decrypt, EncryptWithChosenRandomness, KeyGeneration};
 use paillier::{DecryptionKey, EncryptionKey, Randomness, RawCiphertext, RawPlaintext};
+use paillier::{Paillier};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use subtle::ConstantTimeEq;
@@ -72,11 +72,13 @@ pub struct KeyGenSecondMsg {
     pub comm_witness: CommWitness,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PaillierKeyPair {
     pub ek: EncryptionKey,
     dk: DecryptionKey,
+    #[serde(with = "paillier::serialize::bigint")]
     pub encrypted_share: BigInt,
+    #[serde(with = "paillier::serialize::bigint")]
     randomness: BigInt,
 }
 
@@ -87,17 +89,20 @@ pub struct SignatureRecid {
     pub recid: u8,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Signature {
+    #[serde(with = "paillier::serialize::bigint")]
     pub s: BigInt,
+    #[serde(with = "paillier::serialize::bigint")]
     pub r: BigInt,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Party1Private {
-    x1: Scalar<Secp256k1>,
-    paillier_priv: DecryptionKey,
-    c_key_randomness: BigInt,
+    pub x1: Scalar<Secp256k1>,
+    pub paillier_priv: DecryptionKey,
+    #[serde(with = "paillier::serialize::bigint")]
+    pub c_key_randomness: BigInt,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -122,7 +127,7 @@ pub struct EphEcKeyPair {
     secret_share: Scalar<Secp256k1>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EphKeyGenFirstMsg {
     pub d_log_proof: ECDDHProof<Secp256k1, Sha256>,
     pub public_share: Point<Secp256k1>,
@@ -233,6 +238,13 @@ pub fn compute_pubkey(
     other_share_public_share: &Point<Secp256k1>,
 ) -> Point<Secp256k1> {
     other_share_public_share * &party_one_private.x1
+}
+
+pub fn compute_add_pubkey(
+    party_one_public_share: &Point<Secp256k1>,
+    other_share_public_share: &Point<Secp256k1>,
+) -> Point<Secp256k1> {
+    other_share_public_share + party_one_public_share
 }
 
 impl Party1Private {
@@ -505,6 +517,33 @@ impl Signature {
         )
         .0;
         let s_tag_fe = Scalar::<Secp256k1>::from(s_tag.as_ref());
+        let s_tag_tag = s_tag_fe * k1_inv;
+        let s_tag_tag_bn = s_tag_tag.to_bigint();
+
+        let s = cmp::min(
+            s_tag_tag_bn.clone(),
+            Scalar::<Secp256k1>::group_order().clone() - s_tag_tag_bn,
+        );
+
+        Signature { s, r: rx }
+    }
+
+    pub fn compute_with_plain_msg(
+        plain_msg: &BigInt,
+        ephemeral_local_share: &EphEcKeyPair,
+        ephemeral_other_public_share: &Point<Secp256k1>,
+    ) -> Signature {
+        //compute r = k2* R1
+        let r = ephemeral_other_public_share * &ephemeral_local_share.secret_share;
+
+        let rx = r
+            .x_coord()
+            .unwrap()
+            .mod_floor(Scalar::<Secp256k1>::group_order());
+
+        let k1_inv = ephemeral_local_share.secret_share.invert().unwrap();
+
+        let s_tag_fe = Scalar::<Secp256k1>::from(plain_msg);
         let s_tag_tag = s_tag_fe * k1_inv;
         let s_tag_tag_bn = s_tag_tag.to_bigint();
 
